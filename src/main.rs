@@ -40,43 +40,39 @@ impl std::fmt::Display for Sentence {
 fn main() {
     let mut sentences: HashMap<String, Sentence> = HashMap::new();
 
-    // Useful for debugging on vscode.
-    let interactive_run = true;
-    if interactive_run {
-        'new_page_of_text: loop {
-            println!("Paste a page of text here.\nEnter EOF when you are done with the page, or Ctrl + C to close this program:");
-            let mut mode = Mode::Header;
-            use std::io::BufRead;
-            let stdin_raw = std::io::stdin();
-            let stdin = stdin_raw.lock();
-            for line_result in stdin.lines() {
-                if let Ok(line) = line_result {
-                    match mode {
-                        Mode::Header => match line.as_str() {
-                            "Page" => mode = Mode::TextBody,
-                            "EOF" => break 'new_page_of_text,
-                            _ => {
-                                println!("{}", line);
-                            }
-                        },
-                        Mode::TextBody => {
-                            if line == "EOF" {
-                                continue 'new_page_of_text;
-                            }
-                            line.split('.').for_each(|sentence| {
-                                if sentence.len() > 40 {
-                                    let reduced: String =
-                                        sentence.chars().filter(|c| c.is_alphanumeric()).collect();
-                                    sentences
-                                        .entry(reduced)
-                                        .or_insert_with(|| Sentence {
-                                            text: String::from(sentence.trim()),
-                                            count: 0,
-                                        })
-                                        .count += 1;
-                                }
-                            });
+    'new_page_of_text: loop {
+        println!("Paste a page of text here.\nEnter EOF when you are done with the page, or Ctrl + C to close this program:");
+        let mut mode = Mode::Header;
+        use std::io::BufRead;
+        let stdin_raw = std::io::stdin();
+        let stdin = stdin_raw.lock();
+        for line_result in stdin.lines() {
+            if let Ok(line) = line_result {
+                match mode {
+                    Mode::Header => match line.as_str() {
+                        "Page" => mode = Mode::TextBody,
+                        "EOF" => break 'new_page_of_text,
+                        _ => {
+                            println!("{}", line);
                         }
+                    },
+                    Mode::TextBody => {
+                        if line == "EOF" {
+                            continue 'new_page_of_text;
+                        }
+                        line.split('.').for_each(|sentence| {
+                            if sentence.len() > 40 {
+                                let reduced: String =
+                                    sentence.chars().filter(|c| c.is_alphanumeric()).collect();
+                                sentences
+                                    .entry(reduced)
+                                    .or_insert_with(|| Sentence {
+                                        text: String::from(sentence.trim()),
+                                        count: 0,
+                                    })
+                                    .count += 1;
+                            }
+                        });
                     }
                 }
             }
