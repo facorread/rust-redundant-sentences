@@ -65,10 +65,12 @@ fn main() {
                             }
                             line.split('.').for_each(|sentence| {
                                 if sentence.len() > 40 {
+                                    let reduced: String =
+                                        sentence.chars().filter(|c| c.is_alphanumeric()).collect();
                                     sentences
-                                        .entry(String::from(sentence))
-                                        .or_insert_with_key(|sentence| Sentence {
-                                            text: sentence.clone(),
+                                        .entry(reduced)
+                                        .or_insert_with(|| Sentence {
+                                            text: String::from(sentence.trim()),
                                             count: 0,
                                         })
                                         .count += 1;
