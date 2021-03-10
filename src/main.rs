@@ -29,11 +29,28 @@ struct Sentence {
     text: String,
     /// Count of occurrences
     count: i32,
+    /// Report of occurrences
+    report: Vec<String>,
+}
+
+impl Sentence {
+    fn push(&mut self, s: &str) {
+        match self.report.last() {
+            None => self.report.push(String::from(s)),
+            Some(item) if item != s => self.report.push(String::from(s)),
+            _ => (),
+        }
+        self.count += 1;
+    }
 }
 
 impl std::fmt::Display for Sentence {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}\t{}", self.count, self.text)
+        write!(f, "{}", self.count)?;
+        for v in &self.report {
+            write!(f, " {}", v)?;
+        }
+        write!(f, "\t{}", self.text)
     }
 }
 
@@ -72,49 +89,60 @@ fn get_input_path() -> Option<std::path::PathBuf> {
 
 fn open_input_file(
     result_dir_entry: std::result::Result<std::fs::DirEntry, std::io::Error>,
-) -> Option<std::fs::File> {
+) -> Option<(String, std::fs::File)> {
     let txt_ext = Some(std::ffi::OsStr::new("txt"));
     match result_dir_entry {
         Ok(dir_entry) => {
             let file_path = dir_entry.path();
             let os_string_file_name = dir_entry.file_name();
             let file_name = os_string_file_name.to_string_lossy();
-            match dir_entry.file_type() {
-                Ok(file_type) => {
-                    if file_type.is_file() {
-                        if file_path.extension() == txt_ext {
-                            match std::fs::File::open(file_path) {
-                                Ok(input_file_unbuffered) => Some(input_file_unbuffered),
-                                Err(e) => {
-                                    println!(
-                                        "Error opening input/{}:\n{}\n{}",
-                                        file_name, e, TRY_AGAIN_MSG
-                                    );
-                                    None
+            if let Some(file_name_no_extension) = file_name.get(..file_name.len() - 4) {
+                match dir_entry.file_type() {
+                    Ok(file_type) => {
+                        if file_type.is_file() {
+                            if file_path.extension() == txt_ext {
+                                match std::fs::File::open(file_path) {
+                                    Ok(input_file_unbuffered) => Some((
+                                        file_name_no_extension.to_string(),
+                                        input_file_unbuffered,
+                                    )),
+                                    Err(e) => {
+                                        println!(
+                                            "Error opening input/{}:\n{}\n{}",
+                                            file_name, e, TRY_AGAIN_MSG
+                                        );
+                                        None
+                                    }
                                 }
+                            } else {
+                                println!(
+                                    "Error: input/{} is not a txt file.\n{}",
+                                    file_name, TRY_AGAIN_MSG
+                                );
+                                None
                             }
                         } else {
                             println!(
-                                "Error: input/{} is not a txt file.\n{}",
+                                "Error: input/{} is not a regular file.\n{}",
                                 file_name, TRY_AGAIN_MSG
                             );
                             None
                         }
-                    } else {
+                    }
+                    Err(e) => {
                         println!(
-                            "Error: input/{} is not a regular file.\n{}",
-                            file_name, TRY_AGAIN_MSG
+                            "Error when checking the type of input/{}:\n{}\n{}",
+                            file_name, e, TRY_AGAIN_MSG
                         );
                         None
                     }
                 }
-                Err(e) => {
-                    println!(
-                        "Error when checking the type of input/{}:\n{}\n{}",
-                        file_name, e, TRY_AGAIN_MSG
-                    );
-                    None
-                }
+            } else {
+                println!(
+                    "Error: After removing invalid characters, file name input/{} becomes too short\n{}",
+                    file_name, TRY_AGAIN_MSG
+                );
+                None
             }
         }
         Err(e) => {
@@ -131,13 +159,13 @@ fn main() {
     use std::io::prelude::*;
     let mut sentences: HashMap<String, Sentence> = HashMap::new();
     if let Some(out_file_unbuffered) = create_output_file() {
-        let out_file = std::io::BufWriter::new(out_file_unbuffered);
+        let mut out_file = std::io::BufWriter::new(out_file_unbuffered);
         if let Some(input_path) = get_input_path() {
             for result_dir_entry in
                 std::fs::read_dir(input_path).expect("Listing the contents of input/")
             {
                 match open_input_file(result_dir_entry) {
-                    Some(input_file_unbuffered) => {
+                    Some((input_file_name_no_extension, input_file_unbuffered)) => {
                         let mut mode = Mode::Header;
                         let input_file = std::io::BufReader::new(input_file_unbuffered);
                         for line_result in input_file.lines() {
@@ -161,8 +189,9 @@ fn main() {
                                                     .or_insert_with(|| Sentence {
                                                         text: String::from(sentence.trim()),
                                                         count: 0,
+                                                        report: Vec::new(),
                                                     })
-                                                    .count += 1;
+                                                    .push(&input_file_name_no_extension);
                                             }
                                         });
                                     }
@@ -175,19 +204,14 @@ fn main() {
             }
             let mut sentences: Vec<_> = sentences.values().collect();
             sentences.sort_unstable_by_key(|sentence| -sentence.count);
-            println!("Total sentences: {}", sentences.len());
+            writeln!(&mut out_file, "Total sentences: {}", sentences.len())
+                .expect("Writing the total number of sentences to report.txt");
             let nontrivial = |x: &&Sentence| !x.text.starts_with("Collapse Subdiscussion");
-            let repeated = |x: &&Sentence| nontrivial(x) && x.count > 1;
-            if sentences.iter().any(repeated) {
-                for sentence in sentences.into_iter().filter(repeated) {
-                    println!("{}", sentence);
-                }
-            } else {
-                for sentence in sentences.into_iter().filter(nontrivial) {
-                    println!("{}", sentence);
-                }
-                println!("{}", USAGE_MSG);
+            for sentence in sentences.into_iter().filter(nontrivial) {
+                writeln!(&mut out_file, "{}", sentence).expect("Writing a sentence to report.txt");
             }
         }
+        out_file.flush().expect("Writing report.txt");
+        println!("report.txt is ready.");
     }
 }
