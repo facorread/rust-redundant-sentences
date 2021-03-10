@@ -152,6 +152,7 @@ fn main() {
                                         line.split('.').for_each(|sentence| {
                                             if sentence.len() > 40 {
                                                 let reduced: String = sentence
+                                                    .to_lowercase()
                                                     .chars()
                                                     .filter(|c| c.is_alphanumeric())
                                                     .collect();
